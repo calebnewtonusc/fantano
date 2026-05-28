@@ -9,7 +9,8 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { TrackCard, TrackCardSkeleton } from "./track-card";
 import type { SearchResponse } from "@/lib/types";
 
@@ -40,7 +41,17 @@ interface ExportResult {
 }
 
 export function SearchForm() {
-  const [prompt, setPrompt] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [prompt, setPrompt] = useState(searchParams.get("q") ?? "");
+  const [mac, setMac] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    const isMac = navigator.platform.toLowerCase().includes("mac");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMac(isMac);
+  }, []);
 
   const { data: status, refetch: refetchStatus } = useQuery<{
     data: SpotifyStatus;
@@ -93,16 +104,35 @@ export function SearchForm() {
     },
   });
 
+  const runSearch = (p: string) => {
+    const clean = p.trim();
+    if (!clean) return;
+    // Mirror the query into the URL so the result is shareable.
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("q", clean);
+    router.replace(`/?${params.toString()}`, { scroll: false });
+    search.mutate(clean);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim() || search.isPending) return;
-    search.mutate(prompt.trim());
+    if (search.isPending) return;
+    runSearch(prompt);
   };
 
   const handleSuggestion = (s: string) => {
     setPrompt(s);
-    search.mutate(s);
+    runSearch(s);
   };
+
+  // If the URL has a ?q= on first load, run it automatically.
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q && !search.data && !search.isPending) {
+      runSearch(q);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="w-full text-left">
@@ -117,8 +147,13 @@ export function SearchForm() {
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="Ask for songs in plain English"
           aria-label="Search query"
-          className="h-14 w-full rounded-full border border-white/10 bg-white/[0.06] pl-12 pr-36 text-[17px] font-normal text-white placeholder:text-white/40 backdrop-blur-sm transition-all focus:border-[#2997ff]/60 focus:bg-white/[0.08] focus:outline-none focus:ring-2 focus:ring-[#2997ff]/40"
+          className="h-14 w-full rounded-full border border-white/10 bg-white/[0.06] pl-12 pr-44 text-[17px] font-normal text-white placeholder:text-white/40 backdrop-blur-sm transition-all focus:border-[#2997ff]/60 focus:bg-white/[0.08] focus:outline-none focus:ring-2 focus:ring-[#2997ff]/40 sm:pr-48"
         />
+        {mac !== null && (
+          <kbd className="pointer-events-none absolute right-[100px] top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-white/40 sm:inline-flex">
+            {mac ? "Cmd" : "Ctrl"} K
+          </kbd>
+        )}
         <button
           type="submit"
           disabled={search.isPending || !prompt.trim()}
