@@ -17,8 +17,8 @@ REVIEW_TAG_RE = re.compile(
 )
 
 FAV_BLOCK_RE = re.compile(
-    r"FAV\s+TRACKS?\s*[:\-]\s*(.+?)(?=\n\s*(?:LEAST\s+FAV|LEAST\s+TRACK|$)|$)",
-    re.IGNORECASE | re.DOTALL,
+    r"FAV\s+TRACKS?\s*[:\-]\s*([^\n]+)",
+    re.IGNORECASE,
 )
 
 SKIP_VALUES = {
@@ -69,8 +69,8 @@ def parse_fav_tracks(description: str) -> list[str]:
     block = m.group(1)
     # Cut at the first newline followed by another label (LEAST FAV, Y'all, etc.).
     block = re.split(r"\n\s*(?:LEAST|Y'ALL|YOU CAN|FOLLOW|LISTEN|BUY|http)", block, maxsplit=1, flags=re.IGNORECASE)[0]
-    # Split on commas, slashes, and the word "and".
-    raw = re.split(r"[,/]| and ", block)
+    # Split on commas and the word "and" (slashes are real characters in some track titles).
+    raw = re.split(r",| and ", block)
     out: list[str] = []
     seen: set[str] = set()
     for piece in raw:

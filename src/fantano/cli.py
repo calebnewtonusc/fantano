@@ -7,6 +7,7 @@ import typer
 from dotenv import load_dotenv
 from rich.console import Console
 
+from . import export as export_mod
 from . import fetch as fetch_mod
 from . import parse as parse_mod
 from . import spotify as spotify_mod
@@ -42,6 +43,12 @@ def parse():
 
 
 @app.command()
+def csv():
+    """Export every parsed (artist, track) tuple to tracks.csv for import into Spotify."""
+    export_mod.export_csv()
+
+
+@app.command()
 def match():
     """Search Spotify for every parsed track and cache the URIs."""
     spotify_mod.match_all()
@@ -57,13 +64,12 @@ def build():
 def run(
     limit: int | None = typer.Option(None, help="Cap on videos (useful for first runs)."),
 ):
-    """Run the full pipeline end-to-end: fetch -> parse -> match -> build."""
+    """Run the CSV pipeline end-to-end: fetch -> parse -> csv."""
     load_dotenv()
     url = os.getenv("FANTANO_CHANNEL_URL", "https://www.youtube.com/theneedledrop")
     fetch_mod.scrape_channel(url, limit=limit)
     parse_mod.parse_all()
-    matched, _ = spotify_mod.match_all()
-    spotify_mod.build_playlist(matched)
+    export_mod.export_csv()
 
 
 @app.command()
