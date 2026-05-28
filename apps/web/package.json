@@ -33,5 +33,9 @@
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "minimumReleaseAge": 0
   }
 }
