@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { z } from "zod";
 import type { SearchFilter } from "./types";
 
@@ -22,69 +22,73 @@ const filterSchema = z.object({
   explanation: z.string(),
 });
 
-const filterTool: Anthropic.Tool = {
-  name: "query_tracks",
-  description:
-    "Translate a natural-language music query into a structured filter against the Fantano FAV TRACKS database. Always call this tool — do not respond in plain text.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      genres: {
-        type: "array",
-        items: { type: "string" },
-        description:
-          "Genre keywords to match against the track's genres array (case-insensitive overlap). Use Fantano's specific vocabulary when possible (e.g. 'cloud rap', 'shoegaze', 'experimental hip hop'). Multiple values OR together. Omit if the user did not specify a genre.",
+const filterTool = {
+  type: "function" as const,
+  function: {
+    name: "query_tracks",
+    description:
+      "Translate a natural-language music query into a structured filter against the Fantano FAV TRACKS database. ALWAYS call this; never reply in plain text.",
+    parameters: {
+      type: "object",
+      properties: {
+        genres: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Genre keywords to match against the track's genres array (case-insensitive overlap). Use Fantano's specific vocabulary when possible (e.g. 'cloud rap', 'shoegaze', 'experimental hip hop'). Multiple values OR together. Omit if the user did not specify a genre.",
+        },
+        year_min: {
+          type: "integer",
+          description: "Earliest release year to include, inclusive.",
+        },
+        year_max: {
+          type: "integer",
+          description: "Latest release year to include, inclusive.",
+        },
+        artist_contains: {
+          type: "string",
+          description: "Substring match on artist name (case-insensitive).",
+        },
+        album_contains: {
+          type: "string",
+          description: "Substring match on album title (case-insensitive).",
+        },
+        label_contains: {
+          type: "string",
+          description:
+            "Substring match on record label (e.g. 'TDE', 'XL', 'self-released').",
+        },
+        source: {
+          type: "string",
+          enum: ["album", "single"],
+          description:
+            "album = tracks from album/EP/mixtape reviews (carries album, release_year, label, genres). single = best tracks from Weekly Track Roundups (artist + track + year only, no album/label/genres). Omit to include both.",
+        },
+        limit: {
+          type: "integer",
+          description:
+            "Number of tracks to return. Default 50 if unspecified. The user may explicitly request a number (e.g. 'list 100 folk songs' -> 100). Cap at 500.",
+        },
+        order_by: {
+          type: "string",
+          enum: [
+            "release_year_desc",
+            "release_year_asc",
+            "upload_date_desc",
+            "random",
+          ],
+          description:
+            "release_year_desc (default, newest releases first), release_year_asc, upload_date_desc (most recently reviewed by Fantano), or random (variety).",
+        },
+        explanation: {
+          type: "string",
+          description:
+            "One-sentence plain-English summary of how you interpreted the user's query.",
+        },
       },
-      year_min: {
-        type: "integer",
-        description: "Earliest release year to include, inclusive.",
-      },
-      year_max: {
-        type: "integer",
-        description: "Latest release year to include, inclusive.",
-      },
-      artist_contains: {
-        type: "string",
-        description: "Substring match on artist name (case-insensitive).",
-      },
-      album_contains: {
-        type: "string",
-        description: "Substring match on album title (case-insensitive).",
-      },
-      label_contains: {
-        type: "string",
-        description:
-          "Substring match on record label (e.g. 'TDE', 'XL', 'self-released').",
-      },
-      source: {
-        type: "string",
-        enum: ["album", "single"],
-        description:
-          "album = tracks Fantano flagged as FAV TRACK within an album/EP/mixtape review (carries album, release_year, label, genres). single = tracks Fantano flagged as BEST in a Weekly Track Roundup (artist + track + year only, no album/label/genres). Omit to include both. If the user filters by genre/label/album, only `album` rows can match anyway - the system handles that automatically.",
-      },
-      limit: {
-        type: "integer",
-        description:
-          "Number of tracks to return. Default 50 if unspecified. The user may explicitly request a number (e.g. 'list 100 folk songs' -> 100). Cap at 500.",
-      },
-      order_by: {
-        type: "string",
-        enum: [
-          "release_year_desc",
-          "release_year_asc",
-          "upload_date_desc",
-          "random",
-        ],
-        description:
-          "release_year_desc (default, newest releases first), release_year_asc, upload_date_desc (most recently reviewed by Fantano), or random (variety).",
-      },
-      explanation: {
-        type: "string",
-        description:
-          "One-sentence plain-English summary of how you interpreted the user's query.",
-      },
+      required: ["limit", "order_by", "explanation"],
+      additionalProperties: false,
     },
-    required: ["limit", "order_by", "explanation"],
   },
 };
 
@@ -114,7 +118,7 @@ export async function extractFilter(
   prompt: string,
   genreVocabulary: string[],
 ): Promise<FilterResult> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   const vocabHint =
     genreVocabulary.length > 0
@@ -123,23 +127,30 @@ export async function extractFilter(
           .join(", ")}`
       : "";
 
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT + vocabHint,
+  const completion = await client.chat.completions.create({
+    model: "gpt-4o",
+    temperature: 0,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT + vocabHint },
+      { role: "user", content: prompt },
+    ],
     tools: [filterTool],
-    tool_choice: { type: "tool", name: "query_tracks" },
-    messages: [{ role: "user", content: prompt }],
+    tool_choice: { type: "function", function: { name: "query_tracks" } },
   });
 
-  const toolUse = message.content.find(
-    (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
-  );
-  if (!toolUse) {
-    throw new Error("Anthropic did not return a tool call.");
+  const toolCall = completion.choices[0]?.message?.tool_calls?.[0];
+  if (!toolCall || toolCall.type !== "function") {
+    throw new Error("OpenAI did not return a tool call.");
   }
 
-  const parsed = filterSchema.safeParse(toolUse.input);
+  let rawArgs: unknown;
+  try {
+    rawArgs = JSON.parse(toolCall.function.arguments);
+  } catch (err) {
+    throw new Error(`OpenAI returned invalid JSON: ${(err as Error).message}`);
+  }
+
+  const parsed = filterSchema.safeParse(rawArgs);
   if (!parsed.success) {
     throw new Error(`Invalid filter from LLM: ${parsed.error.message}`);
   }
