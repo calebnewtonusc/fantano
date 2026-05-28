@@ -4,7 +4,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 RUN corepack enable pnpm
 
-COPY apps/web/package.json apps/web/pnpm-lock.yaml* ./
+COPY apps/web/package.json apps/web/pnpm-lock.yaml* apps/web/.npmrc* ./
 RUN pnpm install --frozen-lockfile
 
 # ---- builder ----
