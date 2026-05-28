@@ -1,5 +1,5 @@
 # Next.js web service. Build context = repo root.
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 RUN corepack enable pnpm
@@ -8,7 +8,7 @@ COPY apps/web/package.json apps/web/pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 
 # ---- builder ----
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 RUN corepack enable pnpm
@@ -23,7 +23,7 @@ ENV ANTHROPIC_API_KEY=build-time-placeholder
 RUN pnpm build
 
 # ---- runner ----
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 RUN corepack enable pnpm
