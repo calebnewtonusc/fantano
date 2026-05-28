@@ -7,3 +7,5 @@ data/*.json
 data/*.cache
 !data/.gitkeep
 .spotipy_cache
+
+# tracks.csv IS checked in — it's the data product, not a build artifact.
