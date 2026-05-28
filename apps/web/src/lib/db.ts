@@ -101,6 +101,11 @@ function buildAlbumWhere(filter: SearchFilter, startIdx: number): BuiltClause {
     params.push(filter.artist_contains);
     p++;
   }
+  if (filter.artist_exclude) {
+    where.push(`lower(artist) NOT LIKE '%' || lower($${p}) || '%'`);
+    params.push(filter.artist_exclude);
+    p++;
+  }
   if (filter.album_contains) {
     where.push(`lower(album) LIKE '%' || lower($${p}) || '%'`);
     params.push(filter.album_contains);
@@ -138,6 +143,11 @@ function buildSingleWhere(filter: SearchFilter, startIdx: number): BuiltClause {
     params.push(filter.artist_contains);
     p++;
   }
+  if (filter.artist_exclude) {
+    where.push(`lower(artist) NOT LIKE '%' || lower($${p}) || '%'`);
+    params.push(filter.artist_exclude);
+    p++;
+  }
   return {
     where: where.length > 0 ? `WHERE ${where.join(" AND ")}` : "",
     params,
@@ -158,12 +168,53 @@ function orderClause(orderBy: SearchFilter["order_by"]): string {
   }
 }
 
+/**
+ * Resolve the "sonic neighborhood" of an artist by aggregating the top genres
+ * Fantano has tagged that artist's albums with. Used when the user asks for
+ * "songs like X" / "X and same-genre artists".
+ */
+async function lookupArtistGenres(artist: string, top = 5): Promise<string[]> {
+  const pool = getPool();
+  const result = await pool.query<{ genre: string }>(
+    `
+    SELECT genre, count(*)::int AS n
+    FROM (
+      SELECT unnest(genres) AS genre
+      FROM album_tracks
+      WHERE lower(artist) LIKE '%' || lower($1) || '%'
+    ) g
+    GROUP BY genre
+    ORDER BY n DESC
+    LIMIT $2
+    `,
+    [artist, top],
+  );
+  return result.rows.map((r) => r.genre);
+}
+
 export async function searchTracks(
   filter: SearchFilter,
 ): Promise<SearchSqlResult> {
   const pool = getPool();
+
+  // Expand similar_to_artist into a genres filter (the actual neighborhood).
+  if (filter.similar_to_artist) {
+    const seedGenres = await lookupArtistGenres(filter.similar_to_artist);
+    if (seedGenres.length > 0) {
+      const combined = new Set<string>(
+        (filter.genres || []).map((g) => g.toLowerCase()),
+      );
+      seedGenres.forEach((g) => combined.add(g));
+      filter = {
+        ...filter,
+        genres: Array.from(combined),
+        source: "album",
+      };
+    }
+  }
+
   const sources = pickSources(filter);
-  const limit = Math.min(Math.max(filter.limit ?? 50, 1), 500);
+  const limit = Math.min(Math.max(filter.limit ?? 100, 1), 500);
   const order = orderClause(filter.order_by);
 
   // Both tables: UNION ALL with computed source label + uid.
@@ -179,7 +230,8 @@ export async function searchTracks(
       WITH q_albums AS (
         SELECT 'a-' || id AS uid, 'album'::text AS source,
                track, artist, album, release_year, label, genres,
-               video_id, video_title, video_url, upload_date
+               video_id, video_title, video_url, upload_date,
+               spotify_uri, cover_url, preview_url, popularity
         FROM album_tracks
         ${albumClause.where}
       ),
@@ -187,7 +239,8 @@ export async function searchTracks(
         SELECT 's-' || id AS uid, 'single'::text AS source,
                track, artist, NULL::text AS album, release_year,
                NULL::text AS label, ARRAY[]::text[] AS genres,
-               video_id, video_title, video_url, upload_date
+               video_id, video_title, video_url, upload_date,
+               spotify_uri, cover_url, preview_url, popularity
         FROM singles
         ${singleClause.where}
       ),
@@ -219,7 +272,8 @@ export async function searchTracks(
     const sql = `
       SELECT 'a-' || id AS uid, 'album'::text AS source,
              track, artist, album, release_year, label, genres,
-             video_id, video_title, video_url, upload_date
+             video_id, video_title, video_url, upload_date,
+             spotify_uri, cover_url, preview_url, popularity
       FROM album_tracks
       ${where}
       ${order}
@@ -239,7 +293,8 @@ export async function searchTracks(
     SELECT 's-' || id AS uid, 'single'::text AS source,
            track, artist, NULL::text AS album, release_year,
            NULL::text AS label, ARRAY[]::text[] AS genres,
-           video_id, video_title, video_url, upload_date
+           video_id, video_title, video_url, upload_date,
+           spotify_uri, cover_url, preview_url, popularity
     FROM singles
     ${where}
     ${order}
@@ -321,3 +376,77 @@ export async function getStats(): Promise<{
 // AlbumRow / SingleRow types remain for future direct queries that need
 // the table-specific shape rather than the unified Track shape.
 export type { AlbumRow, SingleRow };
+
+/** Browse by artist (case-insensitive substring match on the URL slug). */
+export async function tracksByArtist(slug: string): Promise<Track[]> {
+  const filter: SearchFilter = {
+    artist_contains: slug.replace(/-/g, " "),
+    limit: 500,
+    order_by: "release_year_desc",
+  };
+  const { rows } = await searchTracks(filter);
+  return rows;
+}
+
+/** Browse by genre (matches the genre against album_tracks.genres array). */
+export async function tracksByGenre(slug: string): Promise<Track[]> {
+  const filter: SearchFilter = {
+    genres: [decodeURIComponent(slug).replace(/-/g, " ")],
+    limit: 500,
+    order_by: "release_year_desc",
+  };
+  const { rows } = await searchTracks(filter);
+  return rows;
+}
+
+/** Browse by release year. */
+export async function tracksByYear(year: number): Promise<Track[]> {
+  const filter: SearchFilter = {
+    year_min: year,
+    year_max: year,
+    limit: 500,
+    order_by: "upload_date_desc",
+  };
+  const { rows } = await searchTracks(filter);
+  return rows;
+}
+
+/** Top artists by FAV track count, for /artists index + sitemap. */
+export async function topArtists(
+  limit = 200,
+): Promise<Array<{ artist: string; n: number }>> {
+  const pool = getPool();
+  const result = await pool.query<{ artist: string; n: number }>(
+    `
+    SELECT artist, count(*)::int AS n
+    FROM (
+      SELECT artist FROM album_tracks
+      UNION ALL
+      SELECT artist FROM singles
+    ) u
+    GROUP BY artist
+    ORDER BY n DESC, artist ASC
+    LIMIT $1
+    `,
+    [limit],
+  );
+  return result.rows;
+}
+
+/** All distinct release years for /years navigation. */
+export async function distinctYears(): Promise<number[]> {
+  const pool = getPool();
+  const result = await pool.query<{ y: number }>(
+    `
+    SELECT DISTINCT release_year AS y
+    FROM (
+      SELECT release_year FROM album_tracks
+      UNION ALL
+      SELECT release_year FROM singles
+    ) u
+    WHERE release_year IS NOT NULL
+    ORDER BY y DESC
+    `,
+  );
+  return result.rows.map((r) => r.y);
+}

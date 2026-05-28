@@ -4,13 +4,15 @@ import type { SearchFilter } from "./types";
 
 const filterSchema = z.object({
   genres: z.array(z.string()).optional(),
+  similar_to_artist: z.string().optional(),
   year_min: z.number().int().min(1900).max(2100).optional(),
   year_max: z.number().int().min(1900).max(2100).optional(),
   artist_contains: z.string().optional(),
+  artist_exclude: z.string().optional(),
   album_contains: z.string().optional(),
   label_contains: z.string().optional(),
   source: z.enum(["album", "single"]).optional(),
-  limit: z.number().int().min(1).max(500).default(50),
+  limit: z.number().int().min(1).max(500).default(100),
   order_by: z
     .enum([
       "release_year_desc",
@@ -47,7 +49,18 @@ const filterTool = {
         },
         artist_contains: {
           type: "string",
-          description: "Substring match on artist name (case-insensitive).",
+          description:
+            "Substring match on artist name (case-insensitive). Use ONLY when the user wants songs BY that artist specifically. Do NOT use when the user says 'like X', 'similar to X', 'X and same genre', 'X-style', 'X-adjacent' - for those, use similar_to_artist instead.",
+        },
+        similar_to_artist: {
+          type: "string",
+          description:
+            "An artist whose sonic neighborhood the user wants. The server resolves this to that artist's typical genres in Fantano's data and folds them into the genres filter. Use when the user says 'songs like X', 'X and similar artists', 'X-adjacent', 'X and friends', 'same vibe as X', 'X-style'. Do NOT also set artist_contains in that case - you want neighbors, not the same artist.",
+        },
+        artist_exclude: {
+          type: "string",
+          description:
+            "Substring match on artist names to EXCLUDE. Use when the user says 'folk songs but not Bon Iver', 'hip hop excluding Drake', etc.",
         },
         album_contains: {
           type: "string",
@@ -98,16 +111,33 @@ Your only job: convert the user's natural-language request into a structured fil
 
 Rules:
 - ALWAYS call \`query_tracks\`. Never respond with plain text.
-- Be generous with \`genres\` expansion: if the user says "folk", consider also "psych folk", "folk rock", "indie folk", "freak folk". If they say "hip hop", consider "rap", "trap rap", "boom bap", "conscious hip hop", "experimental hip hop", "abstract hip hop", "cloud rap". If they say "metal", consider "black metal", "death metal", "post-metal", "doom metal", "sludge metal". Cast a reasonable net.
+
+- **THE BIGGEST RULE: "songs by X" is NOT the same as "songs like X".**
+  - "Songs by Kendrick" / "Kendrick's stuff" / "what does Kendrick have" -> artist_contains = "Kendrick"
+  - "Songs like Kendrick" / "Kendrick and similar" / "in the same genre as Kendrick" / "Kendrick-style" / "Kendrick adjacent" / "if I like Kendrick, what else?" -> similar_to_artist = "Kendrick" (DO NOT also set artist_contains)
+  - The user almost always wants OTHER artists when they say "like X" or "similar to X" or "same genre as X". They want the neighborhood, not the same dot.
+
+- Be generous with explicit \`genres\` expansion when the user names a genre:
+  - "folk" -> ["folk", "psych folk", "folk rock", "indie folk", "freak folk"]
+  - "hip hop" -> ["hip hop", "rap", "trap rap", "boom bap", "conscious hip hop", "experimental hip hop", "abstract hip hop", "cloud rap"]
+  - "metal" -> ["black metal", "death metal", "post-metal", "doom metal", "sludge metal"]
+  - "electronic" -> ["idm", "techno", "house", "ambient", "electronica", "dance"]
+  - Cast a reasonable net so the result feels rich, not literal.
+
+- "X but not Y" / "X without Y" / "X excluding Y" -> artist_exclude = "Y".
+
 - When the user filters by genre/label/album, only album rows match (singles have no genre/label/album metadata). Don't set source explicitly in that case; the system narrows automatically.
 - Use source = "single" when the user specifically wants singles / roundup picks / loose tracks / non-album cuts.
 - Use source = "album" when the user specifically wants album cuts / deep album tracks.
-- For year-bounded queries: "songs from 2014" -> year_min=2014, year_max=2014. "2010s" -> year_min=2010, year_max=2019. "recent" -> year_min=(current_year - 2).
-- For "best of" / "top" requests without a specific count, default limit to 50.
-- For specific counts like "give me 100 X", set limit to 100.
-- For "songs that sound like [artist]", set artist_contains; consider also nudging genres if you know the artist's lane.
-- Use 'random' order_by for "give me some" / "surprise me" / "variety" intents. Otherwise default to release_year_desc.
-- The explanation should be ONE sentence, plain English, like "Showing the 30 most recent hip-hop tracks Fantano has favored since 2020."`;
+
+- For year-bounded queries: "songs from 2014" -> year_min=2014, year_max=2014. "2010s" -> year_min=2010, year_max=2019. "recent" -> year_min=2024.
+
+- DEFAULT limit is 100 when the user did not specify a count. Bump to 200-500 if the query is broad ("all the folk tracks", "give me everything by X's genre").
+- For specific counts like "give me 30 X", set limit to that number exactly.
+
+- Use 'random' order_by for "give me some" / "surprise me" / "variety" / "shuffle" intents. Otherwise default to release_year_desc.
+
+- The explanation should be ONE sentence, plain English, like "Showing 100 hip-hop tracks Fantano has favored since 2020, ordered newest first."`;
 
 export interface FilterResult {
   filter: SearchFilter;

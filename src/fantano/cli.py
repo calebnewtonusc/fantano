@@ -7,6 +7,7 @@ import typer
 from dotenv import load_dotenv
 from rich.console import Console
 
+from . import enrich as enrich_mod
 from . import export as export_mod
 from . import fetch as fetch_mod
 from . import parse as parse_mod
@@ -53,6 +54,12 @@ def csv():
 def sync():
     """Upsert every parsed track into Postgres (DATABASE_URL from .env)."""
     sync_mod.sync_all()
+
+
+@app.command()
+def enrich():
+    """Spotify-enrich every track: cover art, preview URL, popularity, URI."""
+    enrich_mod.enrich_all()
 
 
 @app.command()

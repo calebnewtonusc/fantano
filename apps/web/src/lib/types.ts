@@ -13,13 +13,25 @@ export interface Track {
   video_title: string | null;
   video_url: string;
   upload_date: string | null;
+  // Spotify enrichment (nullable until enrich pass completes).
+  spotify_uri: string | null;
+  cover_url: string | null;
+  preview_url: string | null;
+  popularity: number | null;
 }
 
 export interface SearchFilter {
   genres?: string[];
+  /**
+   * When set, the server resolves this artist's typical genres in our DB and
+   * folds them into the genres filter, so "songs like X" returns X's whole
+   * sonic neighborhood instead of only rows by X.
+   */
+  similar_to_artist?: string;
   year_min?: number;
   year_max?: number;
   artist_contains?: string;
+  artist_exclude?: string;
   album_contains?: string;
   label_contains?: string;
   source?: TrackSource;
