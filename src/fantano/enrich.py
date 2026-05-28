@@ -65,7 +65,11 @@ def _score(cand: dict, want_artist: str, want_track: str) -> float:
     return 0.5 * a + 0.5 * t
 
 
-def _search(token: str, q: str, limit: int = 5) -> list[dict]:
+class RateLimitExceeded(Exception):
+    """Raised when Spotify hands back a Retry-After we shouldn't sit on."""
+
+
+def _search(token: str, q: str, limit: int = 5, max_wait: int = 90) -> list[dict]:
     r = requests.get(
         "https://api.spotify.com/v1/search",
         params={"q": q, "type": "track", "limit": limit},
@@ -74,8 +78,11 @@ def _search(token: str, q: str, limit: int = 5) -> list[dict]:
     )
     if r.status_code == 429:
         wait = int(r.headers.get("Retry-After", "2"))
+        # Don't sit on multi-hour rate limits; bail so the cron can retry later.
+        if wait > max_wait:
+            raise RateLimitExceeded(f"Retry-After={wait}s exceeds cap {max_wait}s")
         time.sleep(wait + 1)
-        return _search(token, q, limit)
+        return _search(token, q, limit, max_wait)
     if r.status_code == 401:
         raise PermissionError("token expired")
     r.raise_for_status()
@@ -176,6 +183,11 @@ def _enrich_table(
         for row in rows:
             try:
                 hit, token = find_track(token, row["artist"], row["track"], row.get("album"))
+            except RateLimitExceeded as ex:
+                console.log(f"[yellow]rate-limited, stopping for this run:[/yellow] {ex}")
+                _mark_missing(conn, table, misses)
+                conn.commit()
+                return hits, len(misses), token
             except Exception as ex:
                 console.log(f"[yellow]error[/yellow] {row['artist']} - {row['track']}: {ex}")
                 hit = None

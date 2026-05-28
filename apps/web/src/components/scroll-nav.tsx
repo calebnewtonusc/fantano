@@ -50,6 +50,9 @@ export function ScrollNav({ back }: ScrollNavProps) {
           )}
         </Link>
         <div className="flex items-center gap-6 text-[12px] font-normal text-white/70">
+          <Link href="/artists" className="transition hover:text-white">
+            Artists
+          </Link>
           <Link href="/random" className="transition hover:text-white">
             Random
           </Link>

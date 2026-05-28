@@ -92,6 +92,14 @@ def run(
         export_mod.export_csv()
     else:
         sync_mod.sync_all()
+        # Best-effort Spotify enrichment of any new (unenriched) tracks.
+        # Gated on SPOTIFY_CLIENT_ID so the run still succeeds without it.
+        if os.getenv("SPOTIFY_CLIENT_ID") and os.getenv("SPOTIFY_CLIENT_SECRET"):
+            try:
+                enrich_mod.enrich_all()
+            except Exception as ex:  # noqa: BLE001 - non-fatal
+                from rich.console import Console
+                Console().log(f"[yellow]enrich step skipped:[/yellow] {ex}")
 
 
 @app.command()
