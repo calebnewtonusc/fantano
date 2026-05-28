@@ -1,32 +1,66 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
+  /* Apple action blue (used against dark surfaces) */
+  --action-blue: #2997ff;
+  --action-blue-press: #0071e3;
+
+  /* Surface palette (dark-first; Apple's near-black tiles) */
+  --surface-black: #000000;
+  --surface-tile-1: #272729;
+  --surface-tile-2: #2a2a2c;
+  --surface-tile-3: #252527;
+
+  /* Ink (light text on dark) */
+  --ink-primary: #f5f5f7;
+  --ink-secondary: #cccccc;
+  --ink-muted: #86868b;
+  --hairline-dark: rgba(255, 255, 255, 0.08);
+
+  /* Page background = global nav tier (pure black). Tiles step inward. */
+  --background: var(--surface-black);
+  --foreground: var(--ink-primary);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-display:
+    "SF Pro Display", system-ui, -apple-system, BlinkMacSystemFont,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-text:
+    "SF Pro Text", system-ui, -apple-system, BlinkMacSystemFont,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+html {
+  font-family: var(--font-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-text);
+  letter-spacing: -0.011em;
+}
+
+/* Negative tracking applied to display sizes per Apple's "tight headline" cadence. */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.005em;
 }
 
 ::selection {
-  background: rgba(99, 102, 241, 0.4);
+  background: rgba(41, 151, 255, 0.32);
   color: #fff;
 }
 
 @keyframes reveal-up {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(16px);
   }
   to {
     opacity: 1;
@@ -35,5 +69,15 @@ body {
 }
 
 .reveal-up {
-  animation: reveal-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: reveal-up 0.7s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+}
+
+/* Apple's signature single-shadow product elevation. */
+.product-shadow {
+  box-shadow: 0 5px 30px 0 rgba(0, 0, 0, 0.22);
+}
+
+/* Hairline border for cards on dark surface. */
+.hairline-dark {
+  border: 1px solid var(--hairline-dark);
 }

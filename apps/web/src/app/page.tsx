@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { SearchForm } from "@/components/search-form";
 import { getStats } from "@/lib/db";
 
@@ -12,7 +13,7 @@ async function StatsRow() {
       ? `${stats.earliestYear}-${stats.latestYear}`
       : "-";
   return (
-    <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
+    <div className="mt-16 grid grid-cols-2 gap-px overflow-hidden rounded-[18px] bg-white/[0.06] sm:grid-cols-4">
       <Stat label="Tracks" value={stats.totalTracks.toLocaleString()} />
       <Stat label="Albums" value={stats.totalAlbums.toLocaleString()} />
       <Stat label="Singles" value={stats.totalSingles.toLocaleString()} />
@@ -23,11 +24,11 @@ async function StatsRow() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-      <p className="bg-gradient-to-br from-white to-zinc-400 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
+    <div className="bg-[#2a2a2c] px-6 py-7 text-center">
+      <p className="font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
         {value}
       </p>
-      <p className="mt-1 text-xs uppercase tracking-wide text-zinc-500">
+      <p className="mt-2 text-xs font-medium uppercase tracking-[0.12em] text-white/40">
         {label}
       </p>
     </div>
@@ -36,59 +37,94 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export default function Home() {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-zinc-950">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.18),_transparent_60%)]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-500/40 to-transparent" />
-
-      <section className="relative mx-auto max-w-6xl px-4 pb-24 pt-20 sm:px-6 sm:pt-28 lg:px-8 lg:pt-32">
-        <div className="mx-auto max-w-3xl text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-indigo-300">
-            theneedledrop, indexed
-          </span>
-          <h1 className="reveal-up mt-6 bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-4xl font-bold leading-[1.1] tracking-tight text-transparent sm:text-5xl md:text-6xl lg:text-7xl">
-            Every song
-            <br />
-            Fantano has loved.
-          </h1>
-          <p
-            className="reveal-up mx-auto mt-6 max-w-2xl text-base leading-relaxed text-zinc-400 sm:text-lg"
-            style={{ animationDelay: "120ms" }}
+    <>
+      {/* Apple-style global nav: pure black, slim, persistent. */}
+      <nav className="sticky top-0 z-50 border-b border-white/[0.08] bg-black/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-11 max-w-6xl items-center justify-between px-6">
+          <Link
+            href="/"
+            className="text-[13px] font-medium tracking-[-0.01em] text-white"
           >
-            A searchable archive of every track Anthony Fantano has flagged as a
-            FAV in his album reviews and BEST in his Weekly Track Roundups. Ask
-            for it in plain English. Filtered by genre, year, label, vibe.
-          </p>
-
-          <div
-            className="reveal-up mx-auto mt-10 max-w-2xl"
-            style={{ animationDelay: "240ms" }}
-          >
-            <SearchForm />
-          </div>
-
-          <Suspense fallback={null}>
-            <StatsRow />
-          </Suspense>
-        </div>
-      </section>
-
-      <footer className="relative border-t border-zinc-900 bg-zinc-950">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-8 text-xs text-zinc-500 sm:flex-row sm:px-6 lg:px-8">
-          <p>
-            Not affiliated with Anthony Fantano or theneedledrop. Data scraped
-            from public YouTube descriptions.
-          </p>
-          <p>
-            Built by{" "}
+            Fantano
+          </Link>
+          <div className="flex items-center gap-6 text-[12px] font-normal text-white/80">
             <a
-              href="https://github.com/calebnewtonusc"
-              className="text-zinc-400 transition hover:text-white"
+              href="https://www.youtube.com/theneedledrop"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition hover:text-white"
             >
-              calebnewtonusc
+              Source
             </a>
-          </p>
+            <a
+              href="https://github.com/calebnewtonusc/fantano"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition hover:text-white"
+            >
+              GitHub
+            </a>
+          </div>
         </div>
-      </footer>
-    </main>
+      </nav>
+
+      <main className="min-h-screen bg-[#272729] text-white">
+        {/* Hero tile — Apple's "product tile" rhythm: edge-to-edge dark surface,
+            full-bleed, centered stack, generous vertical air. */}
+        <section className="mx-auto max-w-5xl px-6 pb-24 pt-24 sm:pt-32 lg:pt-40">
+          <div className="text-center">
+            <p className="reveal-up text-xs font-medium uppercase tracking-[0.18em] text-[#2997ff]">
+              theneedledrop, indexed
+            </p>
+            <h1
+              className="reveal-up font-display mt-5 text-5xl font-semibold leading-[1.05] text-white sm:text-6xl md:text-7xl lg:text-[80px]"
+              style={{ letterSpacing: "-0.022em", animationDelay: "60ms" }}
+            >
+              Every song
+              <br />
+              <span className="text-white/80">Fantano has loved.</span>
+            </h1>
+            <p
+              className="reveal-up mx-auto mt-6 max-w-2xl text-[17px] font-normal leading-[1.5] text-[#cccccc] sm:text-[19px]"
+              style={{ animationDelay: "160ms" }}
+            >
+              17,153 tracks. Every FAV from his album reviews, every BEST from
+              his Weekly Track Roundups. Ask in plain English.
+            </p>
+
+            <div
+              className="reveal-up mx-auto mt-12 max-w-2xl"
+              style={{ animationDelay: "260ms" }}
+            >
+              <SearchForm />
+            </div>
+
+            <Suspense fallback={null}>
+              <StatsRow />
+            </Suspense>
+          </div>
+        </section>
+
+        {/* Footer tile — Apple uses a parchment footer, we mirror with #1d1d1f
+            for a darker tone change that still acts as the section divider. */}
+        <footer className="border-t border-white/[0.06] bg-[#1d1d1f]">
+          <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-10 text-[12px] text-white/40 sm:flex-row">
+            <p>
+              Not affiliated with Anthony Fantano or theneedledrop. Public
+              YouTube data only.
+            </p>
+            <p>
+              Built by{" "}
+              <a
+                href="https://github.com/calebnewtonusc"
+                className="text-white/60 transition hover:text-white"
+              >
+                calebnewtonusc
+              </a>
+            </p>
+          </div>
+        </footer>
+      </main>
+    </>
   );
 }

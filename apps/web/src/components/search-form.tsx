@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles, ArrowRight, AlertCircle } from "lucide-react";
+import { Sparkles, ArrowRight, AlertCircle, Search } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { TrackCard, TrackCardSkeleton } from "./track-card";
@@ -49,38 +49,40 @@ export function SearchForm() {
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full text-left">
+      {/* Search row — pill input + pill primary CTA, the two Apple button grammars. */}
       <form onSubmit={handleSubmit} className="relative">
-        <Sparkles
-          className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500"
+        <Search
+          className="pointer-events-none absolute left-5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-white/40"
           aria-hidden="true"
         />
         <input
           type="text"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Ask for songs in plain English…"
+          placeholder="Ask for songs in plain English"
           aria-label="Search query"
-          className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/80 py-4 pl-12 pr-32 text-base text-white placeholder:text-zinc-500 shadow-xl shadow-black/30 backdrop-blur-md transition-all focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+          className="h-14 w-full rounded-full border border-white/10 bg-white/[0.06] pl-12 pr-36 text-[17px] font-normal text-white placeholder:text-white/40 backdrop-blur-sm transition-all focus:border-[#2997ff]/60 focus:bg-white/[0.08] focus:outline-none focus:ring-2 focus:ring-[#2997ff]/40"
         />
         <button
           type="submit"
           disabled={isPending || !prompt.trim()}
-          className="absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-500 active:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="absolute right-2 top-1/2 inline-flex h-10 -translate-y-1/2 items-center gap-1.5 rounded-full bg-[#2997ff] px-5 text-[14px] font-medium text-white transition hover:bg-[#0071e3] active:bg-[#0066cc] disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-white/50"
         >
           {isPending ? "Searching" : "Ask"}
           {!isPending && <ArrowRight className="h-4 w-4" aria-hidden="true" />}
         </button>
       </form>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      {/* Suggestion chips — Apple "configurator option chips" rounded.pill. */}
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
         {SUGGESTIONS.map((s) => (
           <button
             key={s}
             type="button"
             onClick={() => handleSuggestion(s)}
             disabled={isPending}
-            className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-900 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-[12px] text-white/70 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {s}
           </button>
@@ -88,20 +90,22 @@ export function SearchForm() {
       </div>
 
       {error && (
-        <div className="mt-8 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
+        <div className="mt-10 flex items-start gap-3 rounded-[18px] border border-red-500/20 bg-red-500/[0.05] p-5">
           <AlertCircle
             className="mt-0.5 h-5 w-5 shrink-0 text-red-400"
             aria-hidden="true"
           />
           <div>
-            <p className="text-sm font-medium text-red-300">Something broke</p>
-            <p className="mt-1 text-sm text-red-400/80">{error.message}</p>
+            <p className="text-[14px] font-semibold text-red-300">
+              Something broke
+            </p>
+            <p className="mt-1 text-[13px] text-red-400/80">{error.message}</p>
           </div>
         </div>
       )}
 
       {isPending && (
-        <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <TrackCardSkeleton key={i} />
           ))}
@@ -109,27 +113,24 @@ export function SearchForm() {
       )}
 
       {!isPending && data?.data && (
-        <div className="mt-10 space-y-6">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-sm text-zinc-400">
-              <span className="text-zinc-200">{data.data.explanation}</span>
-            </p>
-            <p className="text-xs text-zinc-500">
-              {data.data.tracks.length} of {data.data.total.toLocaleString()}{" "}
-              matches
+        <div className="mt-12 space-y-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-white/[0.06] pb-5">
+            <p className="text-[15px] text-white/90">{data.data.explanation}</p>
+            <p className="text-[12px] uppercase tracking-[0.12em] text-white/40">
+              {data.data.tracks.length} of {data.data.total.toLocaleString()}
             </p>
           </div>
 
           {data.data.tracks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/40 py-16 text-center">
+            <div className="flex flex-col items-center justify-center rounded-[18px] border border-white/[0.06] bg-[#2a2a2c] py-20 text-center">
               <Sparkles
-                className="mb-3 h-8 w-8 text-zinc-600"
+                className="mb-3 h-8 w-8 text-white/30"
                 aria-hidden="true"
               />
-              <h3 className="text-lg font-semibold text-zinc-200">
+              <h3 className="text-[17px] font-semibold text-white">
                 No tracks matched
               </h3>
-              <p className="mt-1 max-w-sm text-sm text-zinc-500">
+              <p className="mt-2 max-w-sm text-[14px] text-white/50">
                 Try a broader genre, a different year range, or one of the
                 suggestions above.
               </p>

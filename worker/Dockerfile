@@ -21,6 +21,7 @@ COPY db/ ./db/
 RUN uv sync --frozen --no-dev
 
 ENV DATA_DIR=/data
-VOLUME /data
+# Attach a Railway Volume mounted at /data via the dashboard for cache persistence
+# (Railway does not accept the Docker VOLUME directive).
 
 CMD ["uv", "run", "fantano", "run"]
