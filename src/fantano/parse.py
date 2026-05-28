@@ -21,6 +21,14 @@ FAV_BLOCK_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Fantano's metadata tag line, e.g.:
+#   BLADEE - SULFUR SURFER / 2026 / TRASH ISLAND / CLOUD RAP, EXPERIMENTAL HIP HOP, PSYCH FOLK
+# Split on ` / ` -> [artist - album, year, label, genres-csv].
+TAG_LINE_RE = re.compile(
+    r"^[^/\n]+?\s+-\s+[^/\n]+?\s+/\s+(\d{4})\s+/\s+([^/\n]+?)\s+/\s+([^\n]+)$",
+    re.MULTILINE,
+)
+
 SKIP_VALUES = {
     "", "n/a", "na", "none", "tbd", "all of em", "all of them",
     "everything", "every track", "all", "the whole thing",
@@ -160,6 +168,29 @@ def parse_roundup_best_tracks(video: dict) -> list[tuple[str, str]]:
     return out
 
 
+def parse_tag_line(description: str) -> dict:
+    """Extract release_year, label, and genre tags from Fantano's slash-delimited tag line."""
+    if not description:
+        return {}
+    m = TAG_LINE_RE.search(description)
+    if not m:
+        return {}
+    year_str, label, genres_csv = m.group(1), m.group(2), m.group(3)
+    try:
+        release_year = int(year_str)
+    except ValueError:
+        release_year = None
+    label_clean = label.strip().lower()
+    if label_clean in {"self-released", "self released", "selfreleased"}:
+        label_clean = "self-released"
+    genres = [g.strip().lower() for g in genres_csv.split(",") if g.strip()]
+    return {
+        "release_year": release_year,
+        "label": label_clean,
+        "genres": genres,
+    }
+
+
 def parse_video(video: dict) -> dict | None:
     """Return parsed record for one video, or None if nothing usable was found."""
     kind = video.get("kind")
@@ -167,19 +198,37 @@ def parse_video(video: dict) -> dict | None:
         pairs = parse_roundup_best_tracks(video)
         if not pairs:
             return None
+        upload_year = None
+        ud = video.get("upload_date")
+        if ud and len(ud) >= 4 and ud[:4].isdigit():
+            upload_year = int(ud[:4])
         return {
             "video_id": video.get("id"),
             "title": video.get("title"),
             "url": video.get("url"),
             "upload_date": video.get("upload_date"),
             "kind": "roundup",
-            "tracks": [{"artist": a, "track": t, "album": None} for a, t in pairs],
+            "release_year": upload_year,
+            "label": None,
+            "genres": [],
+            "tracks": [
+                {
+                    "artist": a,
+                    "track": t,
+                    "album": None,
+                    "release_year": upload_year,
+                    "label": None,
+                    "genres": [],
+                }
+                for a, t in pairs
+            ],
         }
 
     artist, album = clean_title(video.get("title", ""))
     favs = parse_fav_tracks(video.get("description", ""))
     if not favs or not artist:
         return None
+    meta = parse_tag_line(video.get("description", ""))
     return {
         "video_id": video.get("id"),
         "title": video.get("title"),
@@ -188,7 +237,20 @@ def parse_video(video: dict) -> dict | None:
         "kind": "review",
         "artist": artist,
         "album": album,
-        "tracks": [{"artist": artist, "track": t, "album": album} for t in favs],
+        "release_year": meta.get("release_year"),
+        "label": meta.get("label"),
+        "genres": meta.get("genres") or [],
+        "tracks": [
+            {
+                "artist": artist,
+                "track": t,
+                "album": album,
+                "release_year": meta.get("release_year"),
+                "label": meta.get("label"),
+                "genres": meta.get("genres") or [],
+            }
+            for t in favs
+        ],
     }
 
 

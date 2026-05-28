@@ -33,6 +33,9 @@ def export_csv() -> int:
                 "track": track,
                 "artist": artist,
                 "album": t.get("album") or "",
+                "release_year": t.get("release_year") or "",
+                "label": t.get("label") or "",
+                "genres": "|".join(t.get("genres") or []),
                 "source": rec.get("kind") or "",
                 "video_title": rec.get("title") or "",
                 "video_url": rec.get("url") or "",
@@ -42,7 +45,10 @@ def export_csv() -> int:
     with TRACKS_CSV.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["track", "artist", "album", "source", "video_title", "video_url", "upload_date"],
+            fieldnames=[
+                "track", "artist", "album", "release_year", "label", "genres",
+                "source", "video_title", "video_url", "upload_date",
+            ],
         )
         writer.writeheader()
         writer.writerows(rows)

@@ -11,6 +11,7 @@ from . import export as export_mod
 from . import fetch as fetch_mod
 from . import parse as parse_mod
 from . import spotify as spotify_mod
+from . import sync as sync_mod
 
 console = Console()
 app = typer.Typer(no_args_is_help=True, add_completion=False, help=__doc__)
@@ -46,6 +47,12 @@ def parse():
 def csv():
     """Export every parsed (artist, track) tuple to tracks.csv for import into Spotify."""
     export_mod.export_csv()
+
+
+@app.command()
+def sync():
+    """Upsert every parsed track into Postgres (DATABASE_URL from .env)."""
+    sync_mod.sync_all()
 
 
 @app.command()
