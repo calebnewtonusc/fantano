@@ -1,12 +1,14 @@
+export type TrackSource = "album" | "single";
+
 export interface Track {
-  id: number;
+  uid: string;
+  source: TrackSource;
   track: string;
   artist: string;
   album: string | null;
   release_year: number | null;
   label: string | null;
   genres: string[];
-  source: "review" | "roundup";
   video_id: string;
   video_title: string | null;
   video_url: string;
@@ -20,7 +22,7 @@ export interface SearchFilter {
   artist_contains?: string;
   album_contains?: string;
   label_contains?: string;
-  source?: "review" | "roundup";
+  source?: TrackSource;
   limit: number;
   order_by:
     | "release_year_desc"

@@ -24,8 +24,14 @@ export function TrackCard({ track, index }: TrackCardProps) {
           </h3>
           <p className="mt-1 truncate text-sm text-zinc-400">{track.artist}</p>
         </div>
-        <span className="shrink-0 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-indigo-300">
-          {track.source === "roundup" ? "Roundup" : "Review"}
+        <span
+          className={
+            track.source === "single"
+              ? "shrink-0 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300"
+              : "shrink-0 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-indigo-300"
+          }
+        >
+          {track.source === "single" ? "Single" : "Album"}
         </span>
       </div>
 

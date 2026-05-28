@@ -70,13 +70,21 @@ def build():
 @app.command()
 def run(
     limit: int | None = typer.Option(None, help="Cap on videos (useful for first runs)."),
+    skip_sync: bool = typer.Option(False, help="Skip Postgres sync (export CSV instead)."),
 ):
-    """Run the CSV pipeline end-to-end: fetch -> parse -> csv."""
+    """Production pipeline: fetch -> parse -> sync to Postgres.
+
+    Use --skip-sync to fall back to local CSV export instead of DB sync
+    (e.g. on a dev box without DATABASE_URL).
+    """
     load_dotenv()
     url = os.getenv("FANTANO_CHANNEL_URL", "https://www.youtube.com/theneedledrop")
     fetch_mod.scrape_channel(url, limit=limit)
     parse_mod.parse_all()
-    export_mod.export_csv()
+    if skip_sync:
+        export_mod.export_csv()
+    else:
+        sync_mod.sync_all()
 
 
 @app.command()

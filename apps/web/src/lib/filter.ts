@@ -9,7 +9,7 @@ const filterSchema = z.object({
   artist_contains: z.string().optional(),
   album_contains: z.string().optional(),
   label_contains: z.string().optional(),
-  source: z.enum(["review", "roundup"]).optional(),
+  source: z.enum(["album", "single"]).optional(),
   limit: z.number().int().min(1).max(500).default(50),
   order_by: z
     .enum([
@@ -58,9 +58,9 @@ const filterTool: Anthropic.Tool = {
       },
       source: {
         type: "string",
-        enum: ["review", "roundup"],
+        enum: ["album", "single"],
         description:
-          "review = tracks from album/EP/mixtape reviews. roundup = best tracks from Weekly Track Roundups (singles). Omit to include both.",
+          "album = tracks Fantano flagged as FAV TRACK within an album/EP/mixtape review (carries album, release_year, label, genres). single = tracks Fantano flagged as BEST in a Weekly Track Roundup (artist + track + year only, no album/label/genres). Omit to include both. If the user filters by genre/label/album, only `album` rows can match anyway - the system handles that automatically.",
       },
       limit: {
         type: "integer",
@@ -88,19 +88,22 @@ const filterTool: Anthropic.Tool = {
   },
 };
 
-const SYSTEM_PROMPT = `You are the search backend for a site that catalogues every track Anthony Fantano (theneedledrop) has ever flagged as a FAV TRACK (in album reviews) or BEST TRACK (in Weekly Track Roundups).
+const SYSTEM_PROMPT = `You are the search backend for a site that catalogues every track Anthony Fantano (theneedledrop) has ever flagged as a FAV TRACK (in album/EP/mixtape reviews) or BEST TRACK (in Weekly Track Roundups). The data lives in two tables: \`album_tracks\` (review picks, with album + release_year + label + genres) and \`singles\` (roundup picks, artist + track + year only). The search merges both by default.
 
 Your only job: convert the user's natural-language request into a structured filter by calling the \`query_tracks\` tool.
 
 Rules:
 - ALWAYS call \`query_tracks\`. Never respond with plain text.
 - Be generous with \`genres\` expansion: if the user says "folk", consider also "psych folk", "folk rock", "indie folk", "freak folk". If they say "hip hop", consider "rap", "trap rap", "boom bap", "conscious hip hop", "experimental hip hop", "abstract hip hop", "cloud rap". If they say "metal", consider "black metal", "death metal", "post-metal", "doom metal", "sludge metal". Cast a reasonable net.
+- When the user filters by genre/label/album, only album rows match (singles have no genre/label/album metadata). Don't set source explicitly in that case; the system narrows automatically.
+- Use source = "single" when the user specifically wants singles / roundup picks / loose tracks / non-album cuts.
+- Use source = "album" when the user specifically wants album cuts / deep album tracks.
 - For year-bounded queries: "songs from 2014" -> year_min=2014, year_max=2014. "2010s" -> year_min=2010, year_max=2019. "recent" -> year_min=(current_year - 2).
 - For "best of" / "top" requests without a specific count, default limit to 50.
 - For specific counts like "give me 100 X", set limit to 100.
 - For "songs that sound like [artist]", set artist_contains; consider also nudging genres if you know the artist's lane.
 - Use 'random' order_by for "give me some" / "surprise me" / "variety" intents. Otherwise default to release_year_desc.
-- The explanation should be ONE sentence and read like "Showing the 30 most recent hip-hop tracks Fantano has favored since 2020."`;
+- The explanation should be ONE sentence, plain English, like "Showing the 30 most recent hip-hop tracks Fantano has favored since 2020."`;
 
 export interface FilterResult {
   filter: SearchFilter;

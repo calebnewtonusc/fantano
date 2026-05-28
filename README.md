@@ -1,67 +1,104 @@
-# Fantano FAV TRACKS -> Spotify
+# Fantano
 
-Builds a Spotify playlist of every song Anthony Fantano has ever called a FAV TRACK across his album/EP/mixtape/track reviews, plus the highlight tracks from his Weekly Track Roundups.
+An AI-searchable database of every song Anthony Fantano (theneedledrop) has ever flagged as a FAV TRACK in an album review or a BEST TRACK in a Weekly Track Roundup.
 
-Pipeline: yt-dlp scrapes [theneedledrop](https://www.youtube.com/theneedledrop), regex pulls the FAV TRACKS lines (and the BEST tracks from roundup chapters/descriptions), Spotipy fuzzy-searches each track, then writes/updates one big playlist on your account.
+Ask it for music in plain English:
 
-## How it works
+- "Give me 100 folk songs"
+- "Best hip hop tracks of 2014"
+- "Recent shoegaze"
+- "Anything on TDE"
 
-1. **fetch** - list every video on the channel, filter to reviews and Weekly Track Roundups, fetch full descriptions + chapter markers via `yt-dlp`. Cached to `data/videos.json`.
-2. **parse** - reviews: pull artist/album from the title and the comma-separated FAV TRACKS line from the description. Roundups: walk chapter markers (or fall back to the description's "Best Tracks:" block), keep tracks tagged BEST/PLATINUM/GOLD/STRONG/HIGHLIGHT, skip WORST/WEAK/NOT GOOD. Cached to `data/parsed.json`.
-3. **match** - for every track, hit Spotify search with `track:"..." artist:"..." album:"..."`, then fall back to looser queries. Score each candidate with rapidfuzz (artist similarity + track similarity, threshold 78). Cached to `data/spotify_matches.json`; misses to `data/unmatched.json`.
-4. **build** - create the playlist if missing, dedupe against existing tracks, add new URIs in batches of 100.
+## Architecture
+
+```
+YouTube (theneedledrop)
+        |
+        v
+Python worker (uv + yt-dlp + psycopg)         <-- cron daily on Railway
+        |  fetch -> parse -> sync
+        v
+Railway Postgres  (1 DB, 2 tables)
+   |
+   |----  album_tracks   review FAVs with full album metadata
+   |       (track, artist, album, release_year, label, genres[])
+   |
+   |----  singles        roundup BEST picks
+           (track, artist, release_year)
+        |
+        v
+Next.js web app (Anthropic Sonnet 4.6 tool-use)   <-- Railway service
+   |
+   |  POST /api/search { prompt }
+   |    -> LLM extracts SearchFilter via tool call
+   |    -> SQL UNION across both tables
+   |    -> returns ranked Track[]
+```
+
+See [RAILWAY.md](./RAILWAY.md) for deploy instructions.
+
+## Repo layout
+
+| Path            | What                                                                   |
+| --------------- | ---------------------------------------------------------------------- |
+| `src/fantano/`  | Python package: `fetch`, `parse`, `sync`, `export`, `cli`, `spotify`   |
+| `db/schema.sql` | Postgres schema, auto-applied by the worker on every run               |
+| `worker/`       | `Dockerfile` for the cron worker service on Railway                    |
+| `apps/web/`     | Next.js 16 + Tailwind 4 + shadcn-style UI, `/api/search`, `/api/stats` |
+| `data/`         | Local pipeline cache (`videos.json`, `parsed.json`) - gitignored       |
+| `tracks.csv`    | Optional CSV export when running with `--skip-sync` - gitignored       |
+
+## How the pipeline works
+
+1. **fetch** - lists every video on the channel via `yt-dlp`, filters titles to album/EP/mixtape/track reviews + Weekly Track Roundups, fetches the full description for each. Cached to `data/videos.json`.
+2. **parse** - for reviews: pulls artist/album from the title, the comma-separated FAV TRACKS line from the description, and the slash-delimited tag line (`ARTIST - ALBUM / 2026 / LABEL / GENRE, GENRE`) for release year + label + genres. For roundups: parses chapter markers (modern videos) or the `!!!BEST TRACKS THIS WEEK!!!` ... `...meh...` section of the description.
+3. **sync** - upserts review tracks into `album_tracks` and roundup tracks into `singles`, deduping on `(video_id, lower(track), lower(artist))`.
 
 Every stage is incremental: re-running only does work that isn't already cached.
 
-## Setup
+## CLI
 
 ```bash
-cd ~/Desktop/2026-Code/fantano
 uv sync
-```
 
-Create a Spotify app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard):
-
-- Redirect URI: `http://127.0.0.1:8888/callback`
-- Copy the Client ID + Client Secret into `.env` (see `.env.example`).
-
-## Usage
-
-```bash
-# end-to-end
+# production pipeline (fetch -> parse -> sync)
 uv run fantano run
 
-# or one stage at a time
-uv run fantano fetch --limit 100   # smoke test on a slice
-uv run fantano parse
-uv run fantano match
-uv run fantano build
-
-# inspect state
-uv run fantano stats
-```
-
-Only album/track reviews:
-
-```bash
+# subset / debug
+uv run fantano fetch --limit 50
 uv run fantano fetch --reviews-only
+uv run fantano fetch --roundups-only
+uv run fantano parse
+uv run fantano sync               # parsed.json -> Postgres
+uv run fantano csv                # parsed.json -> tracks.csv (skip Postgres)
+uv run fantano stats              # local pipeline counts
+uv run fantano run --skip-sync    # full pipeline, CSV instead of Postgres
 ```
 
-Only Weekly Track Roundups:
+## Web app
 
 ```bash
-uv run fantano fetch --roundups-only
+cd apps/web
+cp .env.example .env.local        # set DATABASE_URL + ANTHROPIC_API_KEY
+pnpm install
+pnpm dev
 ```
 
-## Files
+`/api/search` accepts `POST { prompt: string }` and returns:
 
-| File                        | What it holds                                                      |
-| --------------------------- | ------------------------------------------------------------------ |
-| `data/videos.json`          | Raw video metadata (id, title, description, chapters, upload_date) |
-| `data/parsed.json`          | One record per review/roundup with extracted artist/track tuples   |
-| `data/spotify_matches.json` | Search cache keyed by `artist\|album\|track`                       |
-| `data/unmatched.json`       | Tracks Spotify search couldn't confidently resolve                 |
-| `data/playlist_state.json`  | Resulting playlist id / URL / track count                          |
-| `.spotipy_cache`            | Spotipy's user-token cache (auto-managed)                          |
+```ts
+{
+  data: {
+    filter: SearchFilter,    // what the LLM extracted
+    tracks: Track[],         // matched rows
+    total: number,           // total matches before LIMIT
+    explanation: string      // one-line plain-English summary
+  }
+}
+```
+
+## Spotify export (parked)
+
+The `spotify` module (Spotipy + rapidfuzz fuzzy-match) is still in the repo but not wired into the default pipeline. The CSV exporter is the current handoff to Spotify — pair it with [isacmlee/csv-to-playlist](https://github.com/isacmlee/csv-to-playlist) to push tracks into a playlist. When we want first-class Spotify support inside the app, the existing matching code lifts cleanly.
 
 All glory to God!

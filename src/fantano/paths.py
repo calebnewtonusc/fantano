@@ -1,8 +1,12 @@
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DATA = ROOT / "data"
-DATA.mkdir(exist_ok=True)
+
+# When deployed, point DATA_DIR at a Railway volume so the videos.json
+# cache survives between cron runs.
+DATA = Path(os.getenv("DATA_DIR") or (ROOT / "data"))
+DATA.mkdir(parents=True, exist_ok=True)
 
 VIDEOS_JSON = DATA / "videos.json"
 PARSED_JSON = DATA / "parsed.json"

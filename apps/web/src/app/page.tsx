@@ -14,9 +14,9 @@ async function StatsRow() {
   return (
     <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
       <Stat label="Tracks" value={stats.totalTracks.toLocaleString()} />
-      <Stat label="Artists" value={stats.totalArtists.toLocaleString()} />
       <Stat label="Albums" value={stats.totalAlbums.toLocaleString()} />
-      <Stat label="Years covered" value={yearLabel} />
+      <Stat label="Singles" value={stats.totalSingles.toLocaleString()} />
+      <Stat label="Years" value={yearLabel} />
     </div>
   );
 }
