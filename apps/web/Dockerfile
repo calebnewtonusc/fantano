@@ -1,11 +1,10 @@
-# Next.js web service. Build context = apps/web/
+# Next.js web service. Build context = repo root.
 FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-
 RUN corepack enable pnpm
 
-COPY package.json pnpm-lock.yaml* ./
+COPY apps/web/package.json apps/web/pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 
 # ---- builder ----
@@ -15,7 +14,7 @@ WORKDIR /app
 RUN corepack enable pnpm
 
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY apps/web/. .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=postgres://build-time-placeholder
