@@ -126,3 +126,77 @@ export async function spotifyPost<T>(
     );
   return (await res.json()) as T;
 }
+
+interface SpotifySearchTrack {
+  uri: string;
+  name: string;
+  artists: Array<{ name: string }>;
+}
+
+interface SpotifySearchResult {
+  tracks?: { items?: SpotifySearchTrack[] };
+}
+
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Token-set overlap in [0,1] - good enough to confirm Spotify's top hit. */
+function tokenOverlap(a: string, b: string): number {
+  const A = new Set(normalize(a).split(" ").filter(Boolean));
+  const B = new Set(normalize(b).split(" ").filter(Boolean));
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  for (const t of A) if (B.has(t)) inter += 1;
+  return inter / Math.max(A.size, B.size);
+}
+
+function scoreCandidate(
+  cand: SpotifySearchTrack,
+  wantArtist: string,
+  wantTrack: string,
+): number {
+  const candArtists = cand.artists.map((a) => a.name).join(" ");
+  return (
+    0.5 * tokenOverlap(wantArtist, candArtists) +
+    0.5 * tokenOverlap(wantTrack, cand.name)
+  );
+}
+
+const GOOD_MATCH = 0.5;
+
+/**
+ * Resolve a single track to a Spotify URI on demand using the user's token.
+ * Tries progressively looser queries and returns the best confident match, or
+ * null when nothing clears the bar. Throws SpotifyApiError (e.g. 429) so the
+ * caller can stop gracefully when rate-limited.
+ */
+export async function resolveTrackUri(
+  token: string,
+  track: string,
+  artist: string,
+  album?: string | null,
+): Promise<string | null> {
+  const queries: string[] = [];
+  if (album)
+    queries.push(`track:"${track}" artist:"${artist}" album:"${album}"`);
+  queries.push(`track:"${track}" artist:"${artist}"`);
+  queries.push(`${track} ${artist}`);
+
+  let best: { score: number; uri: string } | null = null;
+  for (const q of queries) {
+    const data = await spotifyGet<SpotifySearchResult>(
+      token,
+      `/search?q=${encodeURIComponent(q)}&type=track&limit=5`,
+    );
+    for (const cand of data.tracks?.items ?? []) {
+      const s = scoreCandidate(cand, artist, track);
+      if (!best || s > best.score) best = { score: s, uri: cand.uri };
+    }
+    if (best && best.score >= 0.92) break;
+  }
+  return best && best.score >= GOOD_MATCH ? best.uri : null;
+}

@@ -5,10 +5,18 @@ import { extractFilter } from "@/lib/filter";
 import {
   clearAccessToken,
   getAccessToken,
+  resolveTrackUri,
   SpotifyApiError,
   spotifyGet,
   spotifyPost,
 } from "@/lib/spotify-auth";
+
+// Dev Mode has a low rate limit, so bound how many on-demand lookups one export
+// fires and pace them slightly. Cached URIs don't count against either.
+const MAX_LOOKUPS = 100;
+const LOOKUP_DELAY_MS = 120;
+
+const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,15 +65,46 @@ export async function POST(req: NextRequest) {
     );
     const { rows } = await searchTracks(filter);
 
-    const uris = Array.from(
-      new Set(rows.map((r) => r.spotify_uri).filter((u): u is string => !!u)),
-    );
+    // Resolve the result subset to Spotify URIs at export time. Prefer any URI
+    // we've already cached; search Spotify on demand (under the user's token)
+    // for the rest. If Spotify throttles us mid-way, stop and ship what we have.
+    const uris = new Set<string>();
+    let lookups = 0;
+    let rateLimited = false;
+    for (const r of rows) {
+      if (r.spotify_uri) {
+        uris.add(r.spotify_uri);
+        continue;
+      }
+      if (lookups >= MAX_LOOKUPS) break;
+      if (lookups > 0) await sleep(LOOKUP_DELAY_MS);
+      lookups += 1;
+      try {
+        const uri = await resolveTrackUri(token, r.track, r.artist, r.album);
+        if (uri) uris.add(uri);
+      } catch (err) {
+        if (err instanceof SpotifyApiError && err.status === 429) {
+          rateLimited = true;
+          break;
+        }
+        // 401/403 mean re-auth / not-allowlisted - let the outer catch handle.
+        if (
+          err instanceof SpotifyApiError &&
+          (err.status === 401 || err.status === 403)
+        ) {
+          throw err;
+        }
+        // Transient single-track lookup failure: skip it, keep going.
+      }
+    }
 
-    if (uris.length === 0) {
+    const uriList = Array.from(uris);
+    if (uriList.length === 0) {
       return NextResponse.json(
         {
-          error:
-            "No tracks in this result are enriched with Spotify URIs yet. Try again in a few minutes once enrichment is further along.",
+          error: rateLimited
+            ? "Spotify rate-limited the lookup before any track resolved. Give it a minute, or try a smaller search."
+            : "Couldn't match any of these tracks on Spotify. Try a different search.",
         },
         { status: 422 },
       );
@@ -83,9 +122,9 @@ export async function POST(req: NextRequest) {
     );
 
     // Spotify caps adds at 100 URIs per request.
-    for (let i = 0; i < uris.length; i += 100) {
+    for (let i = 0; i < uriList.length; i += 100) {
       await spotifyPost(token, `/playlists/${playlist.id}/tracks`, {
-        uris: uris.slice(i, i + 100),
+        uris: uriList.slice(i, i + 100),
       });
     }
 
@@ -93,9 +132,10 @@ export async function POST(req: NextRequest) {
       data: {
         playlist_id: playlist.id,
         playlist_url: playlist.external_urls.spotify,
-        added: uris.length,
+        added: uriList.length,
         total_in_search: rows.length,
-        skipped_no_uri: rows.length - uris.length,
+        skipped_no_uri: rows.length - uriList.length,
+        rate_limited: rateLimited,
       },
     });
   } catch (err) {
