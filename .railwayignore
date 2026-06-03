@@ -1,0 +1,9 @@
+.venv/
+data/
+__pycache__/
+*.pyc
+.git/
+.spotipy_cache
+tracks.csv
+node_modules/
+apps/web/.next/
