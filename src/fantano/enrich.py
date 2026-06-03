@@ -69,7 +69,20 @@ class RateLimitExceeded(Exception):
     """Raised when Spotify hands back a Retry-After we shouldn't sit on."""
 
 
-def _search(token: str, q: str, limit: int = 5, max_wait: int = 90) -> list[dict]:
+# Spotify's Client-Credentials search quota is a rolling window; bursting past
+# it earns escalating 429s that can balloon to a multi-hour Retry-After (the
+# "penalty box"). A small fixed gap between calls keeps us comfortably under
+# the limit so a full-catalog backfill can actually finish. Tune via env.
+THROTTLE_SECONDS = float(os.getenv("SPOTIFY_THROTTLE_SECONDS", "0.25"))
+# How long we're willing to sit on a normal short cooldown before giving up and
+# letting the next cron run resume. With throttling in place we should only ever
+# see small Retry-Afters; anything bigger means the penalty box, so we bail.
+MAX_RETRY_WAIT = int(os.getenv("SPOTIFY_MAX_RETRY_WAIT", "120"))
+
+
+def _search(token: str, q: str, limit: int = 5, max_wait: int = MAX_RETRY_WAIT) -> list[dict]:
+    if THROTTLE_SECONDS > 0:
+        time.sleep(THROTTLE_SECONDS)
     r = requests.get(
         "https://api.spotify.com/v1/search",
         params={"q": q, "type": "track", "limit": limit},
@@ -132,10 +145,13 @@ WHERE id = %(id)s
 
 
 def _fetch_unenriched(conn: psycopg.Connection, table: str, limit: int) -> list[dict]:
+    # `singles` (roundup BEST picks) has no album column - only `album_tracks`
+    # carries one. Selecting album unconditionally crashes singles enrichment.
+    album_col = "album" if table == "album_tracks" else "NULL AS album"
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             f"""
-            SELECT id, track, artist, album
+            SELECT id, track, artist, {album_col}
             FROM {table}
             WHERE enriched_at IS NULL
             ORDER BY id
