@@ -238,8 +238,20 @@ def _enrich_table(
     return hits, len(rows) - hits, token
 
 
-def enrich_all(batch_size: int = 50000) -> tuple[int, int]:
-    """Enrich every un-enriched track in both tables. Returns (hits, misses)."""
+# Cap on rows processed per invocation. Spotify Development Mode apps have a low
+# rate limit that bursts into multi-hour Retry-After penalties when you plow the
+# whole catalog at once. Bounding each run (and spacing runs out via cron) keeps
+# us safely under it; 0 means no cap (use for a deliberate one-shot backfill).
+MAX_ROWS_PER_RUN = int(os.getenv("ENRICH_MAX_ROWS", "0"))
+
+
+def enrich_all(batch_size: int = 50000, max_rows: int | None = None) -> tuple[int, int]:
+    """Enrich un-enriched tracks across both tables. Returns (hits, misses).
+
+    max_rows caps how many rows a single run will touch (defaults to the
+    ENRICH_MAX_ROWS env var); 0/None means run until the catalog is exhausted.
+    """
+    cap = MAX_ROWS_PER_RUN if max_rows is None else max_rows
     token = _spotify_token()
     total_hits = 0
     total_misses = 0
@@ -250,7 +262,16 @@ def enrich_all(batch_size: int = 50000) -> tuple[int, int]:
 
         for table in ("album_tracks", "singles"):
             while True:
-                hits, misses, token = _enrich_table(conn, token, table, batch_size)
+                remaining = cap - (total_hits + total_misses) if cap else batch_size
+                if cap and remaining <= 0:
+                    console.print(f"[cyan]hit per-run cap of {cap} rows[/cyan]")
+                    console.print(
+                        f"[green]done[/green] - hits={total_hits} misses={total_misses}"
+                    )
+                    return total_hits, total_misses
+                hits, misses, token = _enrich_table(
+                    conn, token, table, min(batch_size, remaining)
+                )
                 total_hits += hits
                 total_misses += misses
                 if hits + misses == 0:
