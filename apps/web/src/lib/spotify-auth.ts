@@ -21,9 +21,22 @@ export function buildAuthorizeUrl(state: string): string {
     scope: SCOPES,
     redirect_uri: envOrThrow("SPOTIFY_REDIRECT_URI"),
     state,
-    show_dialog: "false",
+    // Always show the account/consent screen so a user can switch accounts or
+    // re-grant after we've rotated the underlying Spotify app credentials.
+    show_dialog: "true",
   });
   return `https://accounts.spotify.com/authorize?${params.toString()}`;
+}
+
+/** Spotify API error that preserves the HTTP status so callers can branch. */
+export class SpotifyApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "SpotifyApiError";
+  }
 }
 
 interface TokenResponse {
@@ -86,7 +99,10 @@ export async function spotifyGet<T>(token: string, path: string): Promise<T> {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok)
-    throw new Error(`spotify GET ${path}: ${res.status} ${await res.text()}`);
+    throw new SpotifyApiError(
+      res.status,
+      `spotify GET ${path}: ${res.status} ${await res.text()}`,
+    );
   return (await res.json()) as T;
 }
 
@@ -104,6 +120,9 @@ export async function spotifyPost<T>(
     body: JSON.stringify(body),
   });
   if (!res.ok)
-    throw new Error(`spotify POST ${path}: ${res.status} ${await res.text()}`);
+    throw new SpotifyApiError(
+      res.status,
+      `spotify POST ${path}: ${res.status} ${await res.text()}`,
+    );
   return (await res.json()) as T;
 }

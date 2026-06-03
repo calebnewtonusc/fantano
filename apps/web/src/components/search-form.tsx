@@ -102,6 +102,20 @@ export function SearchForm() {
     onSuccess: () => {
       refetchStatus();
     },
+    onError: () => {
+      // A 401/403 server-side clears the cookie; resync so the button flips
+      // back to "Connect Spotify".
+      refetchStatus();
+    },
+  });
+
+  const disconnect = useMutation<unknown, Error, void>({
+    mutationFn: async () => {
+      await fetch("/api/spotify/logout", { method: "POST" });
+    },
+    onSettled: () => {
+      refetchStatus();
+    },
   });
 
   const runSearch = (p: string) => {
@@ -218,18 +232,30 @@ export function SearchForm() {
               </p>
             </div>
             {search.data.data.tracks.length > 0 && (
-              <button
-                type="button"
-                onClick={() => exportToPlaylist.mutate(prompt || "")}
-                disabled={exportToPlaylist.isPending || !prompt}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#1db954] px-4 py-2 text-[13px] font-medium text-white shadow-lg shadow-[#1db954]/20 transition hover:bg-[#1ed760] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {exportToPlaylist.isPending
-                  ? "Exporting..."
-                  : status?.data?.connected
-                    ? "Export to Spotify"
-                    : "Connect Spotify and export"}
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => exportToPlaylist.mutate(prompt || "")}
+                  disabled={exportToPlaylist.isPending || !prompt}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#1db954] px-4 py-2 text-[13px] font-medium text-white shadow-lg shadow-[#1db954]/20 transition hover:bg-[#1ed760] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {exportToPlaylist.isPending
+                    ? "Exporting..."
+                    : status?.data?.connected
+                      ? "Export to Spotify"
+                      : "Connect Spotify and export"}
+                </button>
+                {status?.data?.connected && (
+                  <button
+                    type="button"
+                    onClick={() => disconnect.mutate()}
+                    disabled={disconnect.isPending}
+                    className="inline-flex shrink-0 items-center rounded-full border border-white/10 px-3 py-2 text-[12px] font-medium text-white/50 transition hover:border-white/20 hover:text-white/80 disabled:opacity-60"
+                  >
+                    {disconnect.isPending ? "..." : "Disconnect"}
+                  </button>
+                )}
+              </div>
             )}
           </div>
 

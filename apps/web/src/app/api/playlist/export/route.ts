@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getGenreVocabulary, searchTracks } from "@/lib/db";
 import { extractFilter } from "@/lib/filter";
-import { getAccessToken, spotifyGet, spotifyPost } from "@/lib/spotify-auth";
+import {
+  clearAccessToken,
+  getAccessToken,
+  SpotifyApiError,
+  spotifyGet,
+  spotifyPost,
+} from "@/lib/spotify-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,6 +100,28 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("[POST /api/playlist/export]", err);
+
+    if (err instanceof SpotifyApiError) {
+      // Token is stale/invalid - drop it so the next attempt re-authenticates.
+      if (err.status === 401) {
+        await clearAccessToken();
+        return NextResponse.json({ error: "not_connected" }, { status: 401 });
+      }
+      // 403 = the logged-in account isn't allowed to use this Spotify app yet
+      // (Development Mode allowlist) or the grant is missing playlist scopes.
+      // Clear the token so the user can reconnect after being allowlisted.
+      if (err.status === 403) {
+        await clearAccessToken();
+        return NextResponse.json(
+          {
+            error:
+              "Spotify rejected the playlist (403). This app is in Spotify Development Mode, so your account must be added under the app's User Management. Once added, click Connect Spotify again.",
+          },
+          { status: 403 },
+        );
+      }
+    }
+
     const message =
       err instanceof Error ? err.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
