@@ -76,7 +76,9 @@ export async function POST(req: NextRequest) {
         uris.add(r.spotify_uri);
         continue;
       }
-      if (lookups >= MAX_LOOKUPS) break;
+      // Once throttled or capped, stop *looking up* but keep scanning so cached
+      // URIs further down the list still make it into the playlist.
+      if (rateLimited || lookups >= MAX_LOOKUPS) continue;
       if (lookups > 0) await sleep(LOOKUP_DELAY_MS);
       lookups += 1;
       try {
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         if (err instanceof SpotifyApiError && err.status === 429) {
           rateLimited = true;
-          break;
+          continue;
         }
         // 401/403 mean re-auth / not-allowlisted - let the outer catch handle.
         if (
