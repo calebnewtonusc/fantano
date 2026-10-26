@@ -99,6 +99,8 @@ pnpm dev
 
 ## Spotify export (parked)
 
-The `spotify` module (Spotipy + rapidfuzz fuzzy-match) is still in the repo but not wired into the default pipeline. The CSV exporter is the current handoff to Spotify — pair it with [isacmlee/csv-to-playlist](https://github.com/isacmlee/csv-to-playlist) to push tracks into a playlist. When we want first-class Spotify support inside the app, the existing matching code lifts cleanly.
+The `spotify` module (Spotipy + rapidfuzz fuzzy-match) is still in the repo but not wired into the default pipeline. The CSV exporter is the current handoff to Spotify, pair it with [isacmlee/csv-to-playlist](https://github.com/isacmlee/csv-to-playlist) to push tracks into a playlist. When we want first-class Spotify support inside the app, the existing matching code lifts cleanly.
 
 All glory to God!
+
+All glory to God! ✝️❤️
